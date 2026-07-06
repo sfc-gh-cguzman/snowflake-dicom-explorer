@@ -1,9 +1,9 @@
 definition_version: 2
 entities:
-  dicom_explorer:
+  dicom_explorer_sf:
     type: streamlit
     identifier:
-      name: DICOM_EXPLORER
+      name: DICOM_EXPLORER_SF
       database: EW_IMAGING_DB
       schema: EXPLORER
     query_warehouse: COMPUTE_WH

@@ -12,34 +12,33 @@ from streamlit_floating_container import FloatingContainer
 IS_SIS = os.getenv("SNOWFLAKE_HOST") is not None
 
 st.set_page_config(
-    page_title="Cardiac Imaging Intelligence | Edwards Lifesciences",
-    page_icon=":material/cardiology:",
+    page_title="Snowflake DICOM Explorer",
+    page_icon=":material/radiology:",
     layout="wide",
 )
 
 # ---------------------------------------------------------------------------
-# EDWARDS LIFESCIENCES BRAND THEME
+# SNOWFLAKE BRAND THEME
 # ---------------------------------------------------------------------------
-EW_RED = "#C8102E"
-EW_DARK_RED = "#A00D24"
-EW_GRAY_DARK = "#505759"
-EW_GRAY_MED = "#898D8D"
-EW_GRAY_LIGHT = "#E5E5E5"
-EW_WARM_BG = "#F6F2EE"
-EW_COOL_BG = "#EEF3F6"
-EW_BLACK = "#333333"
-EW_WHITE = "#FFFFFF"
-EW_TEAL = "#2D8C9E"
-EW_BLUE = "#3860BE"
-EW_GREEN = "#468254"
+SF_BLUE = "#29B5E8"
+SF_BLUE_DARK = "#11567F"
+SF_NAVY = "#1B2A4A"
+SF_GRAY_DARK = "#2D3748"
+SF_GRAY_MED = "#718096"
+SF_GRAY_LIGHT = "#E2E8F0"
+SF_BG = "#F4F8FB"
+SF_WHITE = "#FFFFFF"
+SF_TEAL = "#38B2AC"
+SF_INDIGO = "#5A67D8"
+SF_GREEN = "#48BB78"
 
-PALETTE = [EW_RED, EW_GRAY_DARK, EW_TEAL, EW_BLUE, EW_GREEN, EW_GRAY_MED, EW_DARK_RED, "#E87722"]
+PALETTE = [SF_BLUE, SF_INDIGO, SF_TEAL, SF_GREEN, SF_NAVY, SF_GRAY_MED, SF_BLUE_DARK, "#ED8936"]
 
 PLOTLY_LAYOUT = dict(
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
     margin=dict(l=40, r=20, t=40, b=40),
-    font=dict(size=12, color=EW_BLACK, family="Arial, Helvetica, sans-serif"),
+    font=dict(size=12, color=SF_NAVY, family="Inter, -apple-system, sans-serif"),
     height=380,
     colorway=PALETTE,
 )
@@ -47,53 +46,50 @@ PLOTLY_LAYOUT = dict(
 st.markdown(f"""
 <style>
     [data-testid="stSidebar"] {{
-        background-color: {EW_GRAY_DARK};
+        background-color: {SF_NAVY};
     }}
     [data-testid="stSidebar"] * {{
-        color: {EW_WHITE} !important;
+        color: {SF_WHITE} !important;
     }}
     [data-testid="stSidebar"] .stMarkdown p,
     [data-testid="stSidebar"] .stMarkdown span {{
-        color: {EW_WHITE} !important;
+        color: {SF_WHITE} !important;
     }}
     [data-testid="stSidebar"] hr {{
-        border-color: rgba(255,255,255,0.2);
+        border-color: rgba(255,255,255,0.15);
     }}
     div[data-baseweb="tab-highlight"] {{
-        background-color: {EW_RED} !important;
+        background-color: {SF_BLUE} !important;
     }}
     .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
-        color: {EW_RED} !important;
+        color: {SF_BLUE} !important;
     }}
     .stMetricValue {{
-        color: {EW_RED} !important;
+        color: {SF_BLUE_DARK} !important;
     }}
     button[kind="primary"] {{
-        background-color: {EW_RED} !important;
-        border-color: {EW_RED} !important;
+        background-color: {SF_BLUE} !important;
+        border-color: {SF_BLUE} !important;
     }}
     button[kind="primary"]:hover {{
-        background-color: {EW_DARK_RED} !important;
-        border-color: {EW_DARK_RED} !important;
+        background-color: {SF_BLUE_DARK} !important;
+        border-color: {SF_BLUE_DARK} !important;
     }}
-    .ew-header {{
-        background: linear-gradient(135deg, {EW_GRAY_DARK} 0%, {EW_RED} 100%);
+    .sf-header {{
+        background: linear-gradient(135deg, {SF_NAVY} 0%, {SF_BLUE_DARK} 100%);
         padding: 1rem 1.5rem;
         border-radius: 8px;
         margin-bottom: 1rem;
     }}
-    .ew-header h2 {{
+    .sf-header h2 {{
         color: white !important;
         margin: 0 !important;
         font-size: 1.3rem !important;
     }}
-    .ew-header p {{
-        color: rgba(255,255,255,0.8) !important;
+    .sf-header p {{
+        color: rgba(255,255,255,0.75) !important;
         margin: 0.2rem 0 0 0 !important;
         font-size: 0.85rem !important;
-    }}
-    .ew-kpi {{
-        border-left: 3px solid {EW_RED} !important;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -168,9 +164,9 @@ def fmt(n):
     return f"{n:,.0f}"
 
 
-def ew_section_header(title, subtitle=None):
+def sf_section_header(title, subtitle=None):
     sub_html = f"<p>{subtitle}</p>" if subtitle else ""
-    st.markdown(f'<div class="ew-header"><h2>{title}</h2>{sub_html}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sf-header"><h2>{title}</h2>{sub_html}</div>', unsafe_allow_html=True)
 
 
 def _clean_response(text):
@@ -182,32 +178,28 @@ def _clean_response(text):
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown(f"""
-    <div style="text-align:center; padding: 0.5rem 0 1rem 0;">
-        <div style="font-size: 2.5rem; font-weight: 700; letter-spacing: -1px; line-height: 1.1;">
-            <span style="color: {EW_RED} !important;">L</span><span style="color: {EW_WHITE} !important;">arge</span>
+    <div style="text-align:center; padding: 0.75rem 0 1rem 0;">
+        <div style="font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; color: {SF_WHITE} !important; line-height: 1.3;">
+            &#10052; DICOM Explorer
         </div>
-        <div style="font-size: 0.7rem; letter-spacing: 3px; text-transform: uppercase; color: {EW_GRAY_LIGHT} !important; margin-top: 2px;">
-            Medical Device
+        <div style="font-size: 0.65rem; letter-spacing: 2px; text-transform: uppercase; color: {SF_BLUE} !important; margin-top: 4px;">
+            Snowflake
         </div>
     </div>
     """, unsafe_allow_html=True)
     st.divider()
     st.markdown(f"""
     <div style="padding: 0 0.5rem;">
-        <div style="font-size: 0.95rem; font-weight: 600; color: {EW_WHITE} !important; margin-bottom: 0.5rem;">
-            Cardiac Imaging Intelligence
-        </div>
-        <div style="font-size: 0.75rem; color: {EW_GRAY_LIGHT} !important; line-height: 1.6;">
-            <span style="color: {EW_RED} !important;">&#9632;</span> 10 CT series &bull; 5 IDC collections<br/>
-            <span style="color: {EW_RED} !important;">&#9632;</span> 4 manufacturers &bull; 2,848 files<br/>
-            <span style="color: {EW_RED} !important;">&#9632;</span> EW_IMAGING_DB.EXPLORER
+        <div style="font-size: 0.75rem; color: {SF_GRAY_LIGHT} !important; line-height: 1.7;">
+            <span style="color: {SF_BLUE} !important;">&#9679;</span> 10 CT series &bull; 5 IDC collections<br/>
+            <span style="color: {SF_BLUE} !important;">&#9679;</span> 4 manufacturers &bull; 2,848 files<br/>
+            <span style="color: {SF_BLUE} !important;">&#9679;</span> EW_IMAGING_DB.EXPLORER
         </div>
     </div>
     """, unsafe_allow_html=True)
     st.divider()
     st.markdown(f"""
-    <div style="font-size: 0.65rem; color: {EW_GRAY_MED} !important; padding: 0 0.5rem;">
-        Powered by Snowflake<br/>
+    <div style="font-size: 0.6rem; color: {SF_GRAY_MED} !important; padding: 0 0.5rem; line-height: 1.6;">
         Cortex AI &bull; Python UDFs &bull; Streamlit
     </div>
     """, unsafe_allow_html=True)
@@ -215,12 +207,13 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # TABS
 # ---------------------------------------------------------------------------
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab7, tab6 = st.tabs([
     ":material/account_tree: Pipeline",
     ":material/search: Explorer",
     ":material/radiology: Viewer",
     ":material/neurology: AI Insights",
     ":material/ecg_heart: Clinical Intelligence",
+    ":material/image_search: Image Search",
     ":material/shield: Governance",
 ])
 
@@ -232,7 +225,7 @@ with tab1:
     df = load_metadata()
     summary = load_series_summary()
 
-    ew_section_header("Pipeline Overview", "End-to-end DICOM ingestion from S3 to structured analytics")
+    sf_section_header("Pipeline Overview", "End-to-end DICOM ingestion from S3 to structured analytics")
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
@@ -306,7 +299,7 @@ $$""", language="sql")
 with tab2:
     df = load_metadata()
 
-    ew_section_header("Metadata Explorer", "Search and filter across 41 DICOM metadata attributes")
+    sf_section_header("Metadata Explorer", "Search and filter across 41 DICOM metadata attributes")
 
     fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1:
@@ -379,7 +372,7 @@ with tab2:
 with tab3:
     summary = load_series_summary()
 
-    ew_section_header("DICOM Viewer", "Real-time medical image rendering via Snowflake Python UDF")
+    sf_section_header("DICOM Viewer", "Real-time medical image rendering via Snowflake Python UDF")
 
     vc1, vc2 = st.columns([1, 3])
     with vc1:
@@ -443,7 +436,7 @@ with tab3:
 # TAB 4: AI INSIGHTS
 # =========================================================================
 with tab4:
-    ew_section_header("AI Insights", "Cortex AI classification, summarization, and anomaly detection")
+    sf_section_header("AI Insights", "Cortex AI classification, summarization, and anomaly detection")
 
     ai_col1, ai_col2 = st.columns(2)
     with ai_col1:
@@ -494,17 +487,17 @@ with tab4:
         an1, an2, an3 = st.columns(3)
         with an1:
             fig_kvp = px.histogram(kvp_vals, nbins=20, title="KVP Distribution",
-                                   color_discrete_sequence=[EW_RED])
+                                   color_discrete_sequence=[SF_BLUE])
             fig_kvp.update_layout(**{**PLOTLY_LAYOUT, 'height': 280})
             st.plotly_chart(fig_kvp, use_container_width=True)
         with an2:
             fig_exp = px.histogram(exposure_vals, nbins=30, title="Exposure Distribution",
-                                   color_discrete_sequence=[EW_TEAL])
+                                   color_discrete_sequence=[SF_TEAL])
             fig_exp.update_layout(**{**PLOTLY_LAYOUT, 'height': 280})
             st.plotly_chart(fig_exp, use_container_width=True)
         with an3:
             fig_th = px.histogram(thickness_vals, nbins=20, title="Slice Thickness Distribution",
-                                  color_discrete_sequence=[EW_BLUE])
+                                  color_discrete_sequence=[SF_INDIGO])
             fig_th.update_layout(**{**PLOTLY_LAYOUT, 'height': 280})
             st.plotly_chart(fig_th, use_container_width=True)
 
@@ -513,7 +506,7 @@ with tab4:
 # TAB 5: CLINICAL INTELLIGENCE
 # =========================================================================
 with tab5:
-    ew_section_header("Clinical Intelligence", "TAVR procedures, device telemetry, adverse events, and CAPA — joined to imaging")
+    sf_section_header("Clinical Intelligence", "TAVR procedures, device telemetry, adverse events, and CAPA — joined to imaging")
 
     proc_df = run_query("SELECT * FROM EW_IMAGING_DB.EXPLORER.FACT_PROCEDURE")
     ae_df = run_query("SELECT * FROM EW_IMAGING_DB.EXPLORER.FACT_ADVERSE_EVENT")
@@ -546,7 +539,7 @@ with tab5:
         with st.container(border=True):
             outcome_by_route = proc_df.groupby(["ACCESS_ROUTE", "OUTCOME"]).size().reset_index(name="COUNT")
             fig_out = px.bar(outcome_by_route, x="ACCESS_ROUTE", y="COUNT", color="OUTCOME",
-                             barmode="group", color_discrete_sequence=[EW_GREEN, EW_RED],
+                             barmode="group", color_discrete_sequence=[SF_GREEN, SF_BLUE],
                              title="Procedure Outcomes by Access Route")
             fig_out.update_layout(**{**PLOTLY_LAYOUT, 'height': 340})
             st.plotly_chart(fig_out, use_container_width=True)
@@ -555,7 +548,7 @@ with tab5:
         with st.container(border=True):
             ae_summary = ae_df.groupby(["EVENT_TYPE", "SEVERITY"]).size().reset_index(name="COUNT")
             fig_ae = px.bar(ae_summary, x="EVENT_TYPE", y="COUNT", color="SEVERITY",
-                            barmode="group", color_discrete_sequence=[EW_TEAL, EW_RED, EW_GRAY_DARK],
+                            barmode="group", color_discrete_sequence=[SF_TEAL, SF_BLUE, SF_NAVY],
                             title="Adverse Events by Type & Severity")
             fig_ae.update_layout(**{**PLOTLY_LAYOUT, 'height': 340}, xaxis_tickangle=-30)
             st.plotly_chart(fig_ae, use_container_width=True)
@@ -590,10 +583,151 @@ with tab5:
 
 
 # =========================================================================
+# TAB 7: IMAGE SEARCH (MedSigLIP Vision-Language)
+# =========================================================================
+with tab7:
+    sf_section_header("Image Search", "Semantic search over DICOM images using MedSigLIP vision-language embeddings")
+
+    if "image_search_results" not in st.session_state:
+        st.session_state.image_search_results = None
+    if "image_search_query" not in st.session_state:
+        st.session_state.image_search_query = ""
+
+    def _run_image_search(query):
+        st.session_state.image_search_query = query
+
+    with st.container(border=True):
+        st.markdown("##### :material/image_search: Describe what you're looking for")
+        st.caption("Natural language queries are encoded into the same 1152-dim vector space as the DICOM images")
+
+        search_input = st.text_input(
+            "Search query",
+            placeholder="e.g., cardiac CT angiography with aortic valve calcification",
+            key="image_search_input",
+            label_visibility="collapsed",
+        )
+
+        example_prompts = [
+            "Cardiac CTA with aortic valve calcification",
+            "Contrast-enhanced coronary angiography",
+            "Chest CT lung parenchyma",
+            "ECG-gated diastolic cardiac CT",
+        ]
+        ecols = st.columns(4)
+        for i, prompt in enumerate(example_prompts):
+            ecols[i].button(
+                prompt, key=f"img_search_{i}", use_container_width=True,
+                on_click=_run_image_search, args=(prompt,),
+            )
+
+    active_query = search_input if search_input else st.session_state.image_search_query
+    if active_query:
+        with st.spinner(f"Searching for: *{active_query}*"):
+            safe_q = active_query.replace("'", "''")
+            search_results = run_query(f"""
+                CALL SF_CLINICAL_DB.UTILS.SEARCH_DICOM_IMAGES('{safe_q}', 9)
+            """)
+
+            if not search_results.empty:
+                raw_variant = search_results.iloc[0][search_results.columns[0]]
+                if isinstance(raw_variant, str):
+                    results_list = json.loads(raw_variant)
+                else:
+                    results_list = raw_variant
+            else:
+                results_list = []
+
+        if results_list:
+            # Deduplicate to one result per series
+            seen_series = {}
+            for r in results_list:
+                series_id = r.get("SERIES_UUID", "")
+                if series_id not in seen_series:
+                    seen_series[series_id] = r
+            unique_results = list(seen_series.values())[:6]
+
+            st.markdown(f"**{len(results_list)} matches** across **{len(unique_results)} series** for: *{active_query}*")
+
+            @st.cache_data(ttl=timedelta(hours=1))
+            def render_series_middle_slice(series_uuid):
+                """Render the middle slice of a series for a representative preview."""
+                r = run_query(f"""
+                    WITH ordered AS (
+                        SELECT FILE_NAME,
+                               ROW_NUMBER() OVER (ORDER BY INSTANCE_NUMBER) AS RN,
+                               COUNT(*) OVER () AS TOTAL
+                        FROM EW_IMAGING_DB.EXPLORER.DICOM_CARDIAC_METADATA
+                        WHERE SPLIT_PART(FILE_NAME, '/', 1) = '{series_uuid}'
+                    )
+                    SELECT EW_IMAGING_DB.EXPLORER.RENDER_DICOM_SLICE(
+                        BUILD_SCOPED_FILE_URL(@EW_IMAGING_DB.EXPLORER.IDC_OPEN_DATA_ALL_STG, FILE_NAME),
+                        40, 400
+                    ) AS IMG
+                    FROM ordered
+                    WHERE RN = FLOOR(TOTAL / 2) + 1
+                """)
+                if not r.empty:
+                    return r.iloc[0]["IMG"]
+                return None
+
+            # Render image grid (one per series)
+            grid_cols = st.columns(3)
+            for idx, result in enumerate(unique_results):
+                col = grid_cols[idx % 3]
+                series_uuid = result.get("SERIES_UUID", "")
+                label = result.get("LABEL", "Unknown")
+                collection = result.get("COLLECTION", "")
+
+                with col:
+                    with st.container(border=True):
+                        st.markdown(f"**{label}**")
+                        st.caption(f"{collection}")
+
+                        img_b64 = render_series_middle_slice(series_uuid)
+                        if img_b64 and not str(img_b64).startswith("ERROR"):
+                            img_bytes = base64.b64decode(img_b64)
+                            st.image(img_bytes, use_container_width=True)
+                        else:
+                            st.info("Unable to render preview")
+
+            # Clinical context panel
+            with st.container(border=True):
+                st.markdown("##### :material/ecg_heart: Clinical Context")
+                st.caption("Procedure outcomes for patients linked to matched imaging series")
+
+                series_uuids = [r.get("SERIES_UUID", "") for r in unique_results]
+                # Map series UUIDs to patients via DICOM metadata
+                uuid_list = "', '".join(series_uuids)
+                clinical_df = run_query(f"""
+                    SELECT DISTINCT
+                        m.SERIES_LABEL, m.PATIENT_ID,
+                        p.PROCEDURE_DATE, p.OUTCOME, p.ACCESS_ROUTE, p.LOS_DAYS,
+                        d.MODEL_NAME, d.VALVE_SIZE_MM,
+                        ae.EVENT_TYPE, ae.SEVERITY
+                    FROM EW_IMAGING_DB.EXPLORER.DICOM_CARDIAC_METADATA m
+                    JOIN EW_IMAGING_DB.EXPLORER.FACT_PROCEDURE p ON m.PATIENT_ID = p.PATIENT_ID
+                    JOIN EW_IMAGING_DB.EXPLORER.DIM_DEVICE d ON p.DEVICE_ID = d.DEVICE_ID
+                    LEFT JOIN EW_IMAGING_DB.EXPLORER.FACT_ADVERSE_EVENT ae ON p.PATIENT_ID = ae.PATIENT_ID
+                    WHERE m.SERIES_LABEL IN (
+                        SELECT DISTINCT SERIES_LABEL
+                        FROM EW_IMAGING_DB.EXPLORER.DICOM_CARDIAC_METADATA
+                        WHERE SPLIT_PART(FILE_NAME, '/', 1) IN ('{uuid_list}')
+                    )
+                    ORDER BY p.PROCEDURE_DATE
+                """)
+                if not clinical_df.empty:
+                    st.dataframe(clinical_df, hide_index=True, use_container_width=True)
+                else:
+                    st.info("No linked TAVR procedures found for these series.")
+        else:
+            st.warning("No results found. Try a different query.")
+
+
+# =========================================================================
 # TAB 6: GOVERNANCE DASHBOARD
 # =========================================================================
 with tab6:
-    ew_section_header("Governance Dashboard", "PHI protection across imaging AND clinical data — one policy, one platform")
+    sf_section_header("Governance Dashboard", "PHI protection across imaging AND clinical data — one policy, one platform")
 
     with st.container(border=True):
         st.markdown("##### :material/lock: PHI Masking — Consistent Across All Tables")
@@ -670,7 +804,7 @@ with tab6:
 # =========================================================================
 if "agent_messages" not in st.session_state:
     st.session_state.agent_messages = [
-        {"role": "ai", "content": "Hi! I'm your cardiac imaging analyst. Ask me anything about the DICOM dataset."},
+        {"role": "ai", "content": "Hi! I'm your DICOM imaging analyst. Ask me anything about the dataset."},
     ]
 if "agent_pending_query" not in st.session_state:
     st.session_state.agent_pending_query = None
@@ -816,9 +950,9 @@ with agent_panel.panel():
     has_user_message = any(m["role"] == "user" for m in st.session_state.agent_messages)
     if not has_user_message:
         example_prompts = [
-            "How many DICOM files are in the dataset?",
+            "Find scans showing aortic valve calcification",
             "Which manufacturers are represented?",
-            "Show me all cardiac CT studies",
+            "Show me contrast-enhanced cardiac CTA images",
             "What is the average slice thickness?",
         ]
         pcols = st.columns(2)

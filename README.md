@@ -52,6 +52,10 @@ Healthcare organizations manage petabytes of medical imaging data — CT scans, 
 │  ├─ 100+ DICOM tags → JSON  ├─ numpy: Hounsfield rescale    │
 │  └─ VARIANT output           ├─ Pillow: PNG rendering        │
 │                              └─ base64 output                │
+│                                                             │
+│  DICOM_TO_BASE64_PNG (UDTF)                                 │
+│  ├─ Warehouse-parallel DICOM → 448x448 PNG conversion       │
+│  └─ Feeds MedSigLIP embedding pipeline                      │
 └─────────────┬─────────────────────────┬─────────────────────┘
               │                         │
               ▼                         ▼
@@ -63,21 +67,25 @@ Healthcare organizations manage petabytes of medical imaging data — CT scans, 
 │  └─ Structured columns │
 └───────────┬────────────┘
             │
-   ┌────────┼────────────────────────────┐
-   │        │                            │
-   ▼        ▼                            ▼
-┌────────┐ ┌──────────────────┐ ┌──────────────────────┐
-│ Cortex │ │  Cortex Search   │ │   Cortex AI          │
-│ Agent  │ │  Service         │ │   Functions           │
-│        │ │  DICOM_STUDY_    │ │   ├─ AI_CLASSIFY      │
-│  NL    │ │  SEARCH          │ │   ├─ AI_COMPLETE      │
-│  Q&A   │ │  (vector index)  │ │   └─ AI_EXTRACT       │
-└────────┘ └──────────────────┘ └──────────────────────┘
+   ┌────────┼────────────────────────────────────────────┐
+   │        │                            │               │
+   ▼        ▼                            ▼               ▼
+┌────────┐ ┌──────────────────┐ ┌──────────────┐ ┌──────────────────┐
+│ Cortex │ │  Cortex Search   │ │  Cortex AI   │ │  MedSigLIP SPCS  │
+│ Agent  │ │  Services        │ │  Functions   │ │  Service          │
+│        │ │                  │ │              │ │                   │
+│  NL    │ │  DICOM_STUDY_    │ │  AI_CLASSIFY │ │  MEDSIGLIP_448_SVC│
+│  Q&A   │ │  SEARCH (text)   │ │  AI_COMPLETE │ │  ├─ predict()     │
+│  +     │ │                  │ │  AI_EXTRACT  │ │  │  (image→embed) │
+│  Image │ │  DICOM_IMAGE_    │ │              │ │  └─ embed_text()  │
+│ Search │ │  SEARCH_SVC      │ │              │ │     (text→embed)  │
+│        │ │  (BYO vectors)   │ │              │ │     1152-dim      │
+└────────┘ └──────────────────┘ └──────────────┘ └──────────────────┘
 ```
 
 ---
 
-## What's in the Prototype (5-Tab Application + Floating Agent)
+## What's in the Prototype (7-Tab Application + Floating Agent)
 
 ### Tab 1: Pipeline Overview
 KPI dashboard showing the full dataset: 23,929 DICOM files across 20 CT series from 5 NCI collections (NSCLC Radiogenomics, VAREPOP Apollo, RIDER Lung PET-CT, COVID-19 NY SBU, NLST). Interactive charts by series, manufacturer, and collection. Includes the actual Python UDF source code that parses binary DICOM.
@@ -93,13 +101,27 @@ Real-time medical image rendering from binary files stored on S3 — executed en
 - **AI_COMPLETE**: Generates clinical summaries from raw DICOM metadata using Claude Sonnet
 - **Parameter Anomaly Detection**: Distribution analysis of KVP, exposure, and slice thickness to identify protocol deviations
 
-### Tab 5: Governance Dashboard
+### Tab 5: Clinical Intelligence
+TAVR (transcatheter aortic valve replacement) clinical workflow. Procedure outcomes by access route, adverse events by type and severity, post-implant hemodynamic telemetry trends, and procedure-to-imaging join table. Built on a synthetic star schema: 20 patients, 20 procedures, 15 devices, 8 sites, 1,000 telemetry readings, 13 adverse events, 5 CAPAs.
+
+### Tab 6: Image Search (MedSigLIP Vision-Language)
+**Semantic search over DICOM images using natural language.** Type a clinical description (e.g., "cardiac CT angiography with aortic valve calcification") and get visually similar DICOM slices ranked by embedding similarity. Powered by:
+- **google/medsiglip-448**: 400M-parameter vision-language dual encoder trained on CT, MRI, chest X-ray, and other medical modalities
+- **BYO Vector Cortex Search**: Pre-computed 1152-dim MedSigLIP embeddings searched via `VECTOR INDEXES`
+- **Rendered previews**: Middle slice of each matched series rendered via `RENDER_DICOM_SLICE` UDF
+- **Clinical context panel**: Joins matched imaging to TAVR procedure outcomes, device data, and adverse events
+
+### Tab 7: Governance Dashboard
 - **PHI Masking**: Side-by-side comparison of SYSADMIN (full access) vs. ANALYST (masked) views of patient identifiers
 - **Data Classification**: Shows how SYSTEM\$CLASSIFY automatically identifies PHI columns (IDENTIFIER, QUASI_IDENTIFIER)
 - **Data Lineage**: Visual trace from raw DICOM binary → metadata table → AI enrichments → dashboard
 
 ### Floating Cortex Agent Chat
-Always-available floating chat panel powered by the Cortex Agent REST API with SSE streaming. Ask questions like "Which manufacturers are represented?" or "Show me all cardiac CT studies." The agent uses Cortex Search Service (vector search over study metadata) as a tool to ground its responses. Streaming tokens render in real-time via `st.write_stream()`, with reasoning tokens filtered out. Falls back to `AI_COMPLETE` if the Agent API is unavailable.
+Always-available floating chat panel powered by the Cortex Agent REST API with SSE streaming. The agent has two tools:
+1. **dicom_metadata_search** — Cortex Search over study metadata (text index) for protocol/manufacturer/modality questions
+2. **dicom_image_search** — MedSigLIP vision-language search for clinical finding/anatomy queries (BYO vector Cortex Search)
+
+Orchestration routes queries to the appropriate tool based on intent. Streaming tokens render in real-time via `st.write_stream()`. Falls back to `AI_COMPLETE` if the Agent API is unavailable.
 
 ---
 
@@ -234,6 +256,7 @@ At 2X-Large: **100,000 DICOM files in ~6.5 minutes for about $11**. No infrastru
 | `IDC_OPEN_DATA_CARDIAC_STG` | External Stage | Single-series subset |
 | `EXTRACT_DICOM_METADATA` | Python UDF | Parses binary DICOM → VARIANT JSON |
 | `RENDER_DICOM_SLICE` | Python UDF | Renders DICOM pixels → base64 PNG |
+| `DICOM_TO_BASE64_PNG` | Python UDTF | Warehouse-parallel DICOM → 448x448 base64 PNG (feeds MedSigLIP) |
 | `DICOM_CARDIAC_METADATA` | Table | 23,929 rows x 41 columns of parsed metadata |
 | `DIM_PATIENT` | Table | 20 synthetic patient demographics (joined via PATIENT_ID) |
 | `DIM_DEVICE` | Table | 15 SAPIEN valve device configurations |
@@ -244,34 +267,44 @@ At 2X-Large: **100,000 DICOM files in ~6.5 minutes for about $11**. No infrastru
 | `FACT_ADVERSE_EVENT` | Table | 13 adverse events |
 | `FACT_CAPA` | Table | 5 corrective/preventive actions |
 | `PHI_MASK` | Masking Policy | Protects PATIENT_ID and PATIENT_NAME |
-| `DICOM_STUDY_SEARCH` | Cortex Search Service | Vector search over study descriptions |
-| `DICOM_IMAGING_AGENT` | Cortex Agent | Named agent with search + text-to-SQL tools |
+| `DICOM_STUDY_SEARCH` | Cortex Search Service | Text search over study descriptions |
+| `DICOM_IMAGE_SEARCH_SVC` | Cortex Search Service | BYO vector search over MedSigLIP 1152-dim embeddings |
+| `DICOM_IMAGING_AGENT` | Cortex Agent | Dual-tool agent (metadata search + image search) |
+| `SEARCH_DICOM_IMAGES` | Stored Procedure | Encodes text query via MedSigLIP + vector search |
+| `MEDSIGLIP_448` (V2) | ML Registry Model | google/medsiglip-448 CustomModel (predict + embed_text) |
+| `MEDSIGLIP_448_SVC` | SPCS Service | GPU inference service on EW_THV_COMPUTE_POOL |
+| `DICOM_BASE64_IMAGES` | Table | Staging table with base64 PNG images for embedding |
+| `DICOM_EMBEDDINGS` | Table | Final embeddings with VECTOR(FLOAT, 1152) column |
 | `CLINICAL_INTELLIGENCE_SV` | Semantic View | 13 metrics over clinical star schema |
-| `DICOM_EXPLORER` | Streamlit App | Deployed SiS app (container runtime) |
+| `DICOM_EXPLORER_SF` | Streamlit App | Deployed SiS app (container runtime) |
 
 ---
 
 ## Project Structure
 
 ```
-dicom-explorer/
+snowflake-dicom-explorer/
 ├── README.md                  # This file
-├── streamlit_app.py           # Streamlit application (6 tabs + floating agent)
+├── streamlit_app.py           # Streamlit application (7 tabs + floating agent)
 ├── snowflake.yml              # SiS deployment manifest (container runtime)
 ├── pyproject.toml             # Python dependencies for SiS
 ├── requirements.txt           # Python dependencies for local dev
 ├── setup.sh                   # One-command SQL deployment script
 ├── .streamlit/
-│   └── config.toml            # Large Med Device brand theme
+│   └── config.toml            # Brand theme
 ├── sql/
 │   ├── 01_database_schema.sql # Database and schema creation
 │   ├── 02_stages.sql          # External stages + directory refresh
 │   ├── 03_udfs.sql            # Python UDFs (metadata extraction, image rendering)
 │   ├── 04_tables.sql          # Metadata table
 │   ├── 05_masking_policies.sql# PHI masking policies
-│   ├── 06_cortex_search.sql   # Cortex Search Service
+│   ├── 06_cortex_search.sql   # Cortex Search Service (text metadata)
 │   ├── 07_data_load.sql       # Full data load pipeline
-│   └── 08_clinical_data_model.sql # Synthetic TAVR star schema (8 tables)
+│   ├── 08_clinical_data_model.sql # Synthetic TAVR star schema (8 tables)
+│   └── 09_agent_definition.sql   # Cortex Agent (dual-tool: metadata + image search)
+├── dicom-search/
+│   ├── medsiglip_log_model.ipynb  # MedSigLIP model registration + SPCS deploy + embedding pipeline
+│   └── byo_search.sql             # Cortex Search BYO vectors + search SP + standalone agent
 └── .gitignore
 ```
 
@@ -283,7 +316,9 @@ dicom-explorer/
 - Snowflake account with `SYSADMIN` role
 - Warehouse: `COMPUTE_WH` (or edit scripts to use your warehouse)
 - Compute pool for container runtime (e.g., `CTTI_DASHBOARD_POOL`)
+- GPU compute pool for MedSigLIP inference (e.g., `EW_THV_COMPUTE_POOL`)
 - External access integration for PyPI (e.g., `ALLOW_ALL_ACCESS_INTEGRATION`)
+- HuggingFace token stored as a Snowflake secret (for MedSigLIP model download)
 - Snowflake CLI v3.14.0+ (`snow --version`)
 - Python 3.11+ with pip (for local development)
 
@@ -291,13 +326,20 @@ dicom-explorer/
 
 ```bash
 # 1. Clone the repo
-git clone <repo-url> && cd dicom-explorer
+git clone <repo-url> && cd snowflake-dicom-explorer
 
-# 2. Run the SQL setup (execute files 01–07 in order)
+# 2. Run the SQL setup (execute files 01–09 in order)
 ./setup.sh --connection <your-connection-name>
 
-# 3. Deploy to Streamlit in Snowflake (container runtime)
-snow streamlit deploy --replace -c <your-connection-name>
+# 3. Run the MedSigLIP notebook in a Snowflake Workspace (GPU required)
+#    This registers the model, deploys the SPCS service, and generates embeddings.
+#    See dicom-search/medsiglip_log_model.ipynb
+
+# 4. Deploy the Cortex Search BYO vector service + agent
+snow sql -f dicom-search/byo_search.sql -c <your-connection-name>
+
+# 5. Deploy to Streamlit in Snowflake (container runtime)
+snow streamlit deploy dicom_explorer_sf --replace -c <your-connection-name>
 ```
 
 The app deploys to `EW_IMAGING_DB.EXPLORER.DICOM_EXPLORER` and is available in Snowsight under **Projects > Streamlit**.
@@ -327,9 +369,13 @@ snow sql -f sql/04_tables.sql -c <connection>
 snow sql -f sql/05_masking_policies.sql -c <connection>
 snow sql -f sql/06_cortex_search.sql -c <connection>
 snow sql -f sql/07_data_load.sql -c <connection>  # ~5 min on Large warehouse for 23,929 files
+snow sql -f sql/08_clinical_data_model.sql -c <connection>
+snow sql -f sql/09_agent_definition.sql -c <connection>
 ```
 
 > **Note**: The data load step (07) processes 23,929 binary DICOM files through the Python UDF. This typically takes about 5 minutes on a Large warehouse. The UDF execution is automatically parallelized across warehouse nodes.
+
+> **Note**: The MedSigLIP embedding pipeline (dicom-search/) requires a GPU compute pool and should be run via the Snowflake Workspace notebook. The SPCS service must be running for the Image Search tab and agent image search tool to function.
 
 ---
 
@@ -376,6 +422,22 @@ All AI capabilities run inside Snowflake with no external API calls:
 - **AI_COMPLETE**: Generates clinical summaries using Claude Sonnet, with full DICOM metadata as context
 - **Cortex Search Service**: Maintains a continuously-updated vector index over study metadata for semantic search
 
+### MedSigLIP Vision-Language Image Search
+
+The Image Search tab uses a bring-your-own-vectors (BYO) approach with Google's MedSigLIP-448 model:
+
+1. **Model**: `google/medsiglip-448` — a SigLIP dual encoder (400M vision + 400M text) pre-trained on CT, MRI, chest X-ray, pathology, derm, and ophthalmology images paired with clinical text
+2. **Embedding**: 1152-dimensional vectors where images and text queries live in the same space
+3. **Pipeline**:
+   - `DICOM_TO_BASE64_PNG` UDTF converts DICOM → windowed, normalized, 448x448 RGB PNG (warehouse-parallel)
+   - `MEDSIGLIP_448_SVC` SPCS service generates embeddings on GPU
+   - `DICOM_EMBEDDINGS` table stores vectors as `VECTOR(FLOAT, 1152)`
+   - `DICOM_IMAGE_SEARCH_SVC` Cortex Search service indexes the pre-computed vectors (`VECTOR INDEXES`)
+4. **Search flow**: Text query → `embed_text()` on SPCS → `multi_index_query` on Cortex Search → ranked results
+5. **Integration**: Results link back to clinical data (TAVR outcomes, adverse events) via PATIENT_ID
+
+This pattern is reusable for any HuggingFace vision model deployed on Snowflake — register as CustomModel, deploy on SPCS, pre-compute embeddings, index with Cortex Search BYO vectors.
+
 ---
 
 ## Security & Compliance Considerations
@@ -406,7 +468,13 @@ Use Snowflake's internal stages. Upload files to an internal stage, and the same
 Cortex AI functions process data within the Snowflake boundary. Data does not leave the platform. Cortex is covered under Snowflake's BAA (Business Associate Agreement) for HIPAA compliance.
 
 **Q: Can we add more imaging modalities (MRI, X-ray, ultrasound)?**
-Yes. The `pydicom` library handles all DICOM modalities. The UDF and table schema are modality-agnostic. Simply add more series UUIDs to the directory refresh and data load.
+Yes. The `pydicom` library handles all DICOM modalities. The UDF and table schema are modality-agnostic. Simply add more series UUIDs to the directory refresh and data load. MedSigLIP was also trained on MRI slices and chest X-rays, so embeddings will work across modalities.
+
+**Q: How does the Image Search work without any text in the DICOM images?**
+MedSigLIP is a contrastive dual encoder — it maps both images and text into the same 1152-dimensional vector space. At indexing time, DICOM pixel data is encoded by the vision encoder. At query time, your natural language description is encoded by the text encoder. Cosine similarity between the two vectors determines relevance. No OCR or text extraction from images is involved.
+
+**Q: Does the MedSigLIP SPCS service need to run continuously?**
+Only when you need to embed new images or process search queries. You can suspend it (`ALTER SERVICE ... SUSPEND`) when not in use to stop GPU costs, and resume it before demo/search sessions. The pre-computed embeddings in `DICOM_EMBEDDINGS` and the Cortex Search index persist independently of the service.
 
 ---
 

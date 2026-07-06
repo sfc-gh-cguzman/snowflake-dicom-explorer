@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 08: Clinical Data Model (Synthetic)
--- Star schema simulating Edwards Lifesciences TAVR clinical workflow.
+-- Star schema simulating TAVR clinical workflow.
 -- Joins to real DICOM_CARDIAC_METADATA via PATIENT_ID and STUDY_INSTANCE_UID.
 -- 20 patients (10 cardiac + 10 chest CT), 1,058 total rows across 8 tables.
 -- =============================================================================
